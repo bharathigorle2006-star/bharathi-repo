@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Supercar Sales Dashboard</title>
+  <style>
+    :root{
+      --bg: #0f1220;
+      --panel: #171a2b;
+      --panel-2:#1d2140;
+      --text:#e7eaf6;
+      --muted:#a9b1d6;
+      --accent:#6c8cff;
+      --accent-2:#00d0ff;
+      --good:#2ecc71;
+      --warn:#f1c40f;
+      --bad:#ff6b6b;
+      --border: rgba(255,255,255,.08);
+      --chip:#242848;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    [data-theme="light"]{
+      --bg: #f7f8fc;
+      --panel:#ffffff;
+      --panel-2:#f0f2f9;
+      --text:#1a1d2b;
+      --muted:#4a5270;
+      --accent:#345bff;
+      --accent-2:#06a3c9;
+      --border: rgba(0,0,0,.08);
+      --chip:#eef1fb;
+      --shadow: 0 8px 24px rgba(16,24,40,.12);
+    }
+
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial}
+    a{color:inherit}
+    .app{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+
+    /* Sidebar */
+    .sidebar{position:sticky;top:0;align-self:start;height:100vh;padding:22px;border-right:1px solid var(--border);background:linear-gradient(180deg,var(--panel),var(--panel-2));}
+    .brand{display:flex;gap:10px;align-items:center;font-weight:700;font-size:18px;margin-bottom:20px}
+    .logo{width:36px;height:36px;display:grid;place-items:center;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:var(--shadow)}
+    .nav{display:grid;gap:8px;margin-top:10px}
+    .nav a{padding:10px 12px;border-radius:12px;color:var(--muted);text-decoration:none;display:flex;gap:8px;align-items:center}
+    .nav a.active,.nav a:hover{background:var(--chip);color:var(--text)}
+    .spacer{flex:1}
+    .sidebar-footer{position:absolute;left:22px;right:22px;bottom:22px}
+    .theme-toggle{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+
+    /* Main */
+    .main{padding:22px}
+    .topbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}
+    .filters{display:flex;gap:10px;flex-wrap:wrap}
+    .field{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--border);padding:8px 10px;border-radius:12px}
+    .field label{color:var(--muted)}
+    select,input[type="month"],input[type="search"]{background:transparent;color:var(--text);border:0;outline:none}
+    .btn{background:linear-gradient(135deg,var(--accent),var(--accent-2));border:0;color:white;padding:10px 14px;border-radius:12px;cursor:pointer;box-shadow:var(--shadow)}
+
+    /* Cards */
+    .grid{display:grid;gap:14px}
+    .kpis{grid-template-columns:repeat(4, minmax(180px,1fr))}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
+    .card h3{margin:0 0 6px 0;font-size:13px;color:var(--muted)}
+    .metric{font-size:26px;font-weight:800;letter-spacing:.3px}
+    .trend{font-size:12px;margin-top:6px}
+    .trend.positive{color:var(--good)}
+    .trend.negative{color:var(--bad)}
+
+    /* Charts + Table */
+    .wide{grid-template-columns: 2fr 1.6fr}
+    canvas{width:100%;height:280px}
+
+    .table{width:100%;border-collapse:collapse}
+    .table th,.table td{padding:12px 10px;border-bottom:1px solid var(--border);text-align:left}
+    .table th{font-size:12px;color:var(--muted);cursor:pointer}
+    .table tr:hover{background:var(--panel-2)}
+
+    /* Badges */
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:var(--chip);color:var(--muted);font-size:12px}
+
+    /* Responsive */
+    @media (max-width: 980px){
+      .app{grid-template-columns:1fr}
+      .sidebar{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--border);border-radius:0}
+      .kpis{grid-template-columns:repeat(2,1fr)}
+      .wide{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">🚗</div>
+        <div>Supercar Sales</div>
+      </div>
+      <div class="nav">
+        <a href="#" class="active">Dashboard</a>
+        <a href="#">Orders</a>
+        <a href="#">Inventory</a>
+        <a href="#">Customers</a>
+        <a href="#">Reports</a>
+      </div>
+      <div class="sidebar-footer">
+        <button class="theme-toggle" id="themeToggle">🌗 Toggle Theme</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h1 style="margin:0;font-size:22px">Realtime Supercar Sales Dashboard</h1>
+        <div class="filters">
+          <div class="field"><label>From</label><input type="month" id="fromMonth"/></div>
+          <div class="field"><label>To</label><input type="month" id="toMonth"/></div>
+          <div class="field"><label>Region</label>
+            <select id="region">
+              <option value="all">All</option>
+              <option>NA</option>
+              <option>EU</option>
+              <option>APAC</option>
+              <option>MEA</option>
+            </select>
+          </div>
+          <div class="field"><label>Brand</label>
+            <select id="brand">
+              <option value="all">All</option>
+            </select>
+          </div>
+          <div class="field"><label>Search</label><input type="search" id="search" placeholder="Find order #, model…"/></div>
+          <button class="btn" id="exportCsv">Export CSV</button>
+        </div>
+      </div>
+
+      <!-- KPI Cards -->
+      <section class="grid kpis" id="kpis">
+        <div class="card"><h3>Total Cars Sold</h3><div class="metric" id="kpiSold">—</div><div class="trend" id="kpiSoldTrend"></div></div>
+        <div class="card"><h3>Total Revenue</h3><div class="metric" id="kpiRevenue">—</div><div class="trend" id="kpiRevenueTrend"></div></div>
+        <div class="card"><h3>Average Price</h3><div class="metric" id="kpiAvg">—</div><div class="trend" id="kpiAvgTrend"></div></div>
+        <div class="card"><h3>Top Brand</h3><div class="metric" id="kpiTop">—</div><div class="trend" id="kpiTopTrend"></div></div>
+      </section>
+
+      <!-- Charts Row -->
+      <section class="grid wide" style="margin-top:14px">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="badge">📊 Sales by Brand</div>
+            <div class="badge" id="brandRangeLabel"></div>
+          </div>
+          <canvas id="brandChart" height="280"></canvas>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="badge">📈 Monthly Sales Trend</div>
+            <div class="badge" id="trendRangeLabel"></div>
+          </div>
+          <canvas id="trendChart" height="280"></canvas>
+        </div>
+      </section>
+
+      <!-- Charts Row 2 -->
+      <section class="grid" style="grid-template-columns:1.2fr 1fr;margin-top:14px">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div class="badge">🥇 Market Share</div>
+            <div class="badge" id="shareRangeLabel"></div>
+          </div>
+          <canvas id="shareChart" height="280"></canvas>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div class="badge">⚡ Live Stats</div></div>
+          <ul id="liveStats" style="list-style:none;margin:0;padding:0;display:grid;gap:10px">
+            <li class="badge">⏱️ Last refresh: <span id="lastRefresh">—</span></li>
+            <li class="badge">🛒 Orders in view: <span id="ordersInView">—</span></li>
+            <li class="badge">💹 Conversion Rate: <span id="convRate">—</span></li>
+            <li class="badge">💵 Highest Ticket: <span id="highestTicket">—</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Table -->
+      <section class="card" style="margin-top:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="badge">🧾 Recent Orders</div>
+          <div class="badge" id="tableRangeLabel"></div>
+        </div>
+        <table class="table" id="ordersTable">
+          <thead>
+            <tr>
+              <th data-sort="id">Order #</th>
+              <th data-sort="date">Date</th>
+              <th data-sort="brand">Brand</th>
+              <th data-sort="model">Model</th>
+              <th data-sort="region">Region</th>
+              <th data-sort="price">Price ($)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    // ===== Demo Data =====
+    const BRANDS = ["Ferrari","Lamborghini","Porsche","McLaren","Aston Martin","Bugatti","Koenigsegg"];
+    const MODELS = {
+      Ferrari:["SF90","812","F8","Roma","488"],
+      Lamborghini:["Huracán","Aventador","Revuelto","Urus"],
+      Porsche:["911 Turbo S","Taycan Turbo S","918 Spyder","GT3 RS"],
+      McLaren:["720S","765LT","Artura","P1"],
+      "Aston Martin":["DBS","Vantage","DB12","Valkyrie"],
+      Bugatti:["Chiron","Divo","Mistral"],
+      Koenigsegg:["Jesko","Regera","Gemera"]
+    };
+
+    const REGIONS = ["NA","EU","APAC","MEA"];
+
+    function rand(min,max){return Math.floor(Math.random()*(max-min+1))+min}
+    function pick(arr){return arr[rand(0,arr.length-1)]}
+    function monthKey(date){return date.toISOString().slice(0,7)}
+
+    // Seed pseudo dataset for the last 14 months (~420 orders)
+    const orders = [];
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth()-13, 1);
+    let id = 10000;
+    for(let d = new Date(start); d <= now; d.setMonth(d.getMonth()+1)){
+      const base = rand(18, 40); // orders per month
+      for(let i=0;i<base;i++){
+        const brand = pick(BRANDS);
+        const model = pick(MODELS[brand]);
+        const region = pick(REGIONS);
+        const day = rand(1, Math.min(28, new Date(d.getFullYear(), d.getMonth()+1, 0).getDate()));
+        const price = priceFor(brand, model) + rand(-20000, 30000);
+        orders.push({
+          id: id++,
+          date: new Date(d.getFullYear(), d.getMonth(), day),
+          brand, model, region,
+          price
+        });
+      }
+    }
+
+    function priceFor(brand, model){
+      const table = {
+        Ferrari: 380000, Lamborghini: 420000, Porsche: 260000,
+        McLaren: 350000, "Aston Martin": 240000, Bugatti: 2800000, Koenigsegg: 3100000
+      };
+      // model multiplier nuance
+      const hotModels = ["Chiron","Jesko","Revuelto","918 Spyder","Valkyrie"];
+      return (table[brand]||200000) * (hotModels.includes(model)? 1.25 : 1);
+    }
+
+    // ===== State & Filters =====
+    const state = {
+      from: monthKey(new Date(now.getFullYear(), now.getMonth()-5, 1)),
+      to: monthKey(now),
+      region: 'all',
+      brand: 'all',
+      search: ''
+    };
+
+    const el = (sel) => document.querySelector(sel);
+
+    // Populate brand filter
+    const brandSel = el('#brand');
+    BRANDS.forEach(b=>{ const o=document.createElement('option'); o.value=b; o.textContent=b; brandSel.appendChild(o); });
+
+    // Init filter controls
+    el('#fromMonth').value = state.from;
+    el('#toMonth').value = state.to;
+
+    el('#fromMonth').addEventListener('change', e => { state.from = e.target.value; renderAll(); });
+    el('#toMonth').addEventListener('change', e => { state.to = e.target.value; renderAll(); });
+    el('#region').addEventListener('change', e => { state.region = e.target.value; renderAll(); });
+    el('#brand').addEventListener('change', e => { state.brand = e.target.value; renderAll(); });
+    el('#search').addEventListener('input', e => { state.search = e.target.value.toLowerCase(); renderTable(); updateLiveStats(); });
+
+    // Theme toggle
+    const root = document.documentElement;
+    el('#themeToggle').addEventListener('click', ()=>{
+      const theme = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      if(theme==='dark') root.removeAttribute('data-theme'); else root.setAttribute('data-theme','light');
+    });
+
+    // Export CSV
+    el('#exportCsv').addEventListener('click', ()=>{
+      const rows = filteredOrders().map(o=>({
+        id:o.id, date:o.date.toISOString().slice(0,10), brand:o.brand, model:o.model, region:o.region, price:o.price
+      }));
+      const header = Object.keys(rows[0]||{id:'',date:'',brand:'',model:'',region:'',price:''}).join(',');
+      const body = rows.map(r=>`${r.id},${r.date},${r.brand},${r.model},${r.region},${r.price}`).join('\n');
+      const blob = new Blob([header+'\n'+body], {type:'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'supercar_orders.csv'; a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Sorting
+    const table = el('#ordersTable');
+    let sortKey = 'date';
+    let sortDir = 'desc';
+    table.querySelectorAll('th').forEach(th=>{
+      th.addEventListener('click', ()=>{
+        const key = th.dataset.sort;
+        if(sortKey===key){ sortDir = sortDir==='asc'?'desc':'asc'; }
+        else { sortKey = key; sortDir = 'asc'; }
+        renderTable();
+      })
+    })
+
+    // ===== Filtering helpers =====
+    function inRange(d, from, to){
+      const y = +d.toISOString().slice(0,4), m = +d.toISOString().slice(5,7);
+      const [fy,fm] = from.split('-').map(Number);
+      const [ty,tm] = to.split('-').map(Number);
+      const ord = (y*12+m), of = (fy*12+fm), ot = (ty*12+tm);
+      return ord>=of && ord<=ot;
+    }
+
+    function filteredOrders(){
+      return orders.filter(o => (
+        inRange(o.date, state.from, state.to) &&
+        (state.region==='all' || o.region===state.region) &&
+        (state.brand==='all' || o.brand===state.brand) &&
+        (!state.search || (`${o.id}`.includes(state.search) || o.model.toLowerCase().includes(state.search) || o.brand.toLowerCase().includes(state.search)))
+      ));
+    }
+
+    // ===== Render KPI =====
+    function renderKpis(){
+      const rows = filteredOrders();
+      const sold = rows.length;
+      const revenue = rows.reduce((a,b)=>a+b.price,0);
+      const avg = sold? revenue/sold : 0;
+      // monthly compare vs previous month
+      const [fy,fm] = state.from.split('-').map(Number);
+      const [ty,tm] = state.to.split('-').map(Number);
+      const months = (ty*12+tm)-(fy*12+fm)+1;
+      const prevFrom = monthKey(new Date(fy, fm-2 - (months-1), 1));
+      const prevTo = monthKey(new Date(fy, fm-2, 1));
+
+      const prevRows = orders.filter(o => (
+        inRange(o.date, prevFrom, prevTo) &&
+        (state.region==='all' || o.region===state.region) &&
+        (state.brand==='all' || o.brand===state.brand)
+      ));
+      const prevSold = prevRows.length;
+      const prevRev = prevRows.reduce((a,b)=>a+b.price,0);
+      const prevAvg = prevSold? prevRev/prevSold : 0;
+
+      el('#kpiSold').textContent = sold.toLocaleString();
+      el('#kpiRevenue').textContent = '$' + Math.round(revenue).toLocaleString();
+      el('#kpiAvg').textContent = '$' + Math.round(avg).toLocaleString();
+
+      setTrend('#kpiSoldTrend', sold, prevSold);
+      setTrend('#kpiRevenueTrend', revenue, prevRev);
+      setTrend('#kpiAvgTrend', avg, prevAvg);
+
+      // top brand
+      const byBrand = groupBy(rows, r=>r.brand, arr=>arr.length);
+      let top = {brand:'—',count:0};
+      Object.entries(byBrand).forEach(([brand,count])=>{ if(count>top.count) top={brand,count}; });
+      el('#kpiTop').textContent = `${top.brand}`;
+      el('#kpiTopTrend').textContent = `${top.count} sales in range`;
+    }
+
+    function setTrend(sel, cur, prev){
+      const elx = el(sel);
+      if(prev===0){ elx.textContent = '—'; elx.className='trend'; return; }
+      const diff = ((cur-prev)/prev)*100;
+      elx.textContent = `${diff>=0? '▲' : '▼'} ${diff.toFixed(1)}% vs prev`;
+      elx.className = 'trend ' + (diff>=0?'positive':'negative');
+    }
+
+    function groupBy(rows, keyFn, agg){
+      const map = {};
+      rows.forEach(r=>{
+        const k = keyFn(r);
+        (map[k]||(map[k]=[])).push(r);
+      });
+      if(agg){
+        const out = {};
+        Object.keys(map).forEach(k=> out[k]=agg(map[k]) );
+        return out;
+      }
+      return map;
+    }
+
+    // ===== Charts (Vanilla Canvas) =====
+    function drawBarChart(canvas, labels, values){
+      const ctx = canvas.getContext('2d');
+      const {width, height} = canvas;
+      ctx.clearRect(0,0,width,height);
+      const pad = 32; const gw = width - pad*2; const gh = height - pad*2;
+      // axes
+      ctx.strokeStyle = 'rgba(180,190,210,.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pad, pad); ctx.lineTo(pad, height-pad); ctx.lineTo(width-pad, height-pad); ctx.stroke();
+      const max = Math.max(...values, 1);
+      const barW = gw / values.length * 0.6;
+      const gap = gw / values.length * 0.4;
+      // grid lines
+      ctx.font = '12px Inter, sans-serif';
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted');
+      for(let i=0;i<=4;i++){
+        const y = height-pad - (gh*(i/4));
+        ctx.globalAlpha = .4; ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(width-pad,y); ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.fillText(Math.round(max*i/4), 6, y+4);
+      }
+      // bars
+      const grad = ctx.createLinearGradient(0,0,0,height);
+      grad.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--accent'));
+      grad.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--accent-2'));
+      values.forEach((v,i)=>{
+        const x = pad + i*(barW+gap) + gap/2;
+        const h = gh * (v/max);
+        ctx.fillStyle = grad;
+        ctx.fillRect(x, height-pad-h, barW, h);
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted');
+        ctx.save(); ctx.translate(x+barW/2, height-pad+14); ctx.rotate(-Math.PI/8);
+        ctx.textAlign='center'; ctx.fillText(labels[i],0,0); ctx.restore();
+      });
+    }
+
+    function drawLineChart(canvas, labels, values){
+      const ctx = canvas.getContext('2d');
+      const {width, height} = canvas; ctx.clearRect(0,0,width,height);
+      const pad = 32; const gw = width - pad*2; const gh = height - pad*2;
+      const max = Math.max(...values, 1);
+      ctx.strokeStyle = 'rgba(180,190,210,.4)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(pad, pad); ctx.lineTo(pad, height-pad); ctx.lineTo(width-pad, height-pad); ctx.stroke();
+      // grid
+      ctx.font='12px Inter, sans-serif'; ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--muted');
+      for(let i=0;i<=4;i++){ const y=height-pad-(gh*(i/4)); ctx.globalAlpha=.4; ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(width-pad,y); ctx.stroke(); ctx.globalAlpha=1; ctx.fillText(Math.round(max*i/4),6,y+4); }
+      // line
+      const pts = values.map((v,i)=>({ x: pad + i*(gw/(values.length-1)), y: height-pad - (gh*(v/max)) }));
+      const grad = ctx.createLinearGradient(0,0,0,height);
+      grad.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--accent'));
+      grad.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--accent-2'));
+      // area
+      ctx.beginPath(); ctx.moveTo(pts[0].x, height-pad); pts.forEach(p=>ctx.lineTo(p.x,p.y)); ctx.lineTo(pts[pts.length-1].x, height-pad); ctx.closePath(); ctx.globalAlpha=.15; ctx.fillStyle=grad; ctx.fill(); ctx.globalAlpha=1;
+      // stroke
+      ctx.beginPath(); pts.forEach((p,i)=> i? ctx.lineTo(p.x,p.y): ctx.moveTo(p.x,p.y)); ctx.lineWidth=2.2; ctx.strokeStyle=grad; ctx.stroke();
+      // labels
+      ctx.textAlign='center'; labels.forEach((l,i)=>{ const p=pts[i]; ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--muted'); ctx.fillText(l, p.x, height-pad+14); });
+    }
+
+    function drawDonut(canvas, labels, values){
+      const ctx = canvas.getContext('2d'); const {width,height}=canvas; ctx.clearRect(0,0,width,height);
+      const cx = width/2, cy = height/2; const r= Math.min(width,height)/2 - 20; const inner = r*0.6;
+      const total = values.reduce((a,b)=>a+b,0) || 1;
+      let ang = -Math.PI/2;
+      const palette = [
+        getComputedStyle(document.documentElement).getPropertyValue('--accent'),
+        getComputedStyle(document.documentElement).getPropertyValue('--accent-2'),
+        '#22c55e','#f97316','#e11d48','#a855f7','#06b6d4'
+      ];
+      values.forEach((v,i)=>{
+        const slice = (v/total)*Math.PI*2;
+        ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,ang,ang+slice); ctx.closePath(); ctx.fillStyle = palette[i%palette.length]; ctx.globalAlpha=.9; ctx.fill(); ctx.globalAlpha=1; ang += slice;
+      });
+      // hole
+      ctx.globalCompositeOperation='destination-out'; ctx.beginPath(); ctx.arc(cx,cy,inner,0,Math.PI*2); ctx.fill(); ctx.globalCompositeOperation='source-over';
+      // legend
+      ctx.font='12px Inter, sans-serif'; ctx.textAlign='left'; ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--muted');
+      labels.forEach((l,i)=>{ const y=20+i*16; ctx.fillStyle=palette[i%palette.length]; ctx.fillRect(10,y-10,10,10); ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--muted'); ctx.fillText(`${l} (${Math.round(values[i]/total*100)}%)`, 26, y); })
+      // center label
+      ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--text'); ctx.textAlign='center'; ctx.font='600 16px Inter, sans-serif'; ctx.fillText('Market Share', cx, cy+6);
+    }
+
+    // ===== Render Charts & Table =====
+    function renderCharts(){
+      const rows = filteredOrders();
+      // by brand (count)
+      const brandMap = groupBy(rows, r=>r.brand, a=>a.length);
+      const brandLabels = Object.keys(brandMap);
+      const brandValues = brandLabels.map(k=>brandMap[k]);
+      el('#brandRangeLabel').textContent = rangeLabel();
+      drawBarChart(el('#brandChart'), brandLabels, brandValues);
+
+      // monthly trend (count)
+      const months = {};
+      rows.forEach(r=>{ const k=monthKey(r.date); months[k]=(months[k]||0)+1; });
+      const sortedKeys = Object.keys(months).sort();
+      const trendVals = sortedKeys.map(k=>months[k]);
+      drawLineChart(el('#trendChart'), sortedKeys.map(k=>k.slice(2)), trendVals);
+      el('#trendRangeLabel').textContent = `${sortedKeys[0]||''} → ${sortedKeys[sortedKeys.length-1]||''}`;
+
+      // share chart
+      drawDonut(el('#shareChart'), brandLabels, brandValues);
+      el('#shareRangeLabel').textContent = rangeLabel();
+    }
+
+    function renderTable(){
+      const rows = filteredOrders().sort((a,b)=>{
+        const dir = sortDir==='asc'? 1 : -1;
+        const A = a[sortKey], B = b[sortKey];
+        if(sortKey==='date') return (A-B)*dir;
+        if(sortKey==='price') return (A-B)*dir;
+        return (''+A).localeCompare(''+B) * dir;
+      });
+      const tbody = table.querySelector('tbody');
+      tbody.innerHTML = rows.map(r=>`
+        <tr>
+          <td>#${r.id}</td>
+          <td>${r.date.toISOString().slice(0,10)}</td>
+          <td>${r.brand}</td>
+          <td>${r.model}</td>
+          <td>${r.region}</td>
+          <td>$${r.price.toLocaleString()}</td>
+        </tr>
+      `).join('');
+      el('#ordersInView').textContent = rows.length.toLocaleString();
+      el('#tableRangeLabel').textContent = rangeLabel();
+    }
+
+    function rangeLabel(){ return `${state.from} → ${state.to}${state.region==='all'?'':` • ${state.region}`}${state.brand==='all'?'':` • ${state.brand}`}` }
+
+    function updateLiveStats(){
+      el('#lastRefresh').textContent = new Date().toLocaleString();
+      const rows = filteredOrders();
+      const highest = rows.reduce((m,r)=> r.price>m? r.price : m, 0);
+      const conv = 2.5 + Math.random()*1.5; // demo number
+      el('#highestTicket').textContent = '$' + highest.toLocaleString();
+      el('#convRate').textContent = conv.toFixed(1) + '%';
+    }
+
+    function renderAll(){
+      renderKpis();
+      renderCharts();
+      renderTable();
+      updateLiveStats();
+    }
+
+    // Resize canvases to device pixels for sharpness
+    function resizeCanvases(){
+      document.querySelectorAll('canvas').forEach(c=>{
+        const rect = c.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        c.width = Math.round(rect.width * ratio);
+        c.height = Math.round(rect.height * ratio);
+      });
+      renderCharts();
+    }
+    window.addEventListener('resize', resizeCanvases);
+
+    // Initial render
+    resizeCanvases();
+    renderAll();
+  </script>
+</body>
+</html>
